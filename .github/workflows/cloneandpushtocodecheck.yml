@@ -1,0 +1,58 @@
+name: Clone And Push to Code Check
+run-name: Push code for Traceability Check PR No# ${{github.event.number }}
+on:
+ workflow_dispatch: 
+ pull_request: 
+  types: 
+    - opened
+
+jobs:
+  clone-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        ref: ${{github.head_ref}} #main  # Specify the branch you want to clone
+                     
+    - name: Clone repository      
+      run: |
+        REPO_NAME=$(basename $GITHUB_REPOSITORY)
+        git clone --branch ${{github.head_ref}} "https://github.com/${{ github.repository }}" client-cloned-repo
+
+        git clone --branch Dev "https://${{secrets.KYN_GIT_USER}}:${{secrets.KYN_GIT_PAT }}@github.kyndryl.net/cloud-practice-engineering/az-terraform-iac.git" kyn-cloned-repo
+
+        cp -r ./client-cloned-repo/iac ./kyn-cloned-repo
+        echo '{
+          "ref": "${{github.ref}}",
+          "repository": "${{github.repository}}",
+          "repository_owner": "${{github.repository_owner}}",
+          "repositoryUrl": "${{github.repositoryUrl}}",
+          "run_id": "${{github.run_id}}",
+          "actor": "${{github.actor}}",
+          "head_ref": "${{github.head_ref}}",
+          "base_ref": "${{github.base_ref}}",
+          "event_name": "${{github.event_name}}",
+          "pr_url":"${{github.event.pull_request._links.html.href}}",
+          "pr_number":"${{github.event.number}}"
+        }' >>client_gitcontext.json
+        
+        cp client_gitcontext.json ./kyn-cloned-repo
+
+    - name: Set up Git for Enterprise
+      run: |
+        cd kyn-cloned-repo                       
+        git remote add enterprise "https://${{secrets.KYN_GIT_USER }}:${{secrets.KYN_GIT_PAT }}@github.kyndryl.net/cloud-practice-engineering/az-terraform-iac.git"
+
+    - name: Push to Enterprise repository
+      env:
+        GITHUB_TOKEN: ${{ secrets.KYN_GIT_PAT }}    
+      run: |
+        cd kyn-cloned-repo               
+        git config user.name ${{ secrets.KYN_GIT_USER }} 
+        git config user.email "${{ secrets.KYN_GIT_USER }}@kyndryl.com"
+        git add .
+        git commit -m "iac code updated and pushed for Traceability check Clinet PR No# ${{github.event.number }}"
+        #git push enterprise ${{github.head_ref}}:Dev -f
+        git push enterprise Dev -f
